@@ -30,9 +30,6 @@ Click **Add** next to Neon, then:
 
 The Free plan (1 GB, 100 compute hours a month) is plenty for this app. It's only offered if your Vercel team doesn't have Neon yet; a team that already uses Neon on a paid plan puts new databases on that plan. A personal Hobby team is the easy way to stay free.
 
-<details>
-<summary>Screenshots</summary>
-
    <img src="docs/deploy-2-add-neon.png" alt="Add Products: Neon" width="480">
 
    <img src="docs/deploy-3-neon-terms.png" alt="Neon terms of service" width="480">
@@ -43,7 +40,6 @@ The Free plan (1 GB, 100 compute hours a month) is plenty for this app. It's onl
 
    <img src="docs/deploy-6-neon-ready.png" alt="Neon database ready" width="480">
 
-</details>
 
 ### 3. Fill in 4 values and deploy
 
@@ -71,9 +67,6 @@ The username, `admin@imap-mcp.local`, is filled in for you and doesn't matter. T
 3. Claude Desktop asks you to confirm in the browser. Click **Continue connecting**.
 4. Sign in with your `ADMIN_PASSWORD`, then click **Allow**. The consent page shows which app is connecting and where access is sent; only allow it if you just started the connection yourself.
 
-<details>
-<summary>Screenshots</summary>
-
    <img src="docs/connect-1-url.png" alt="Claude: Add custom connector, name and URL" width="480">
 
    <img src="docs/connect-2-auth.png" alt="Claude: Sign in now, Use Claude's published identity" width="480">
@@ -82,7 +75,6 @@ The username, `admin@imap-mcp.local`, is filled in for you and doesn't matter. T
 
    <img src="docs/connect-4-consent.png" alt="Consent page: Allow Claude?" width="400">
 
-</details>
 
 **Claude Code:** run `claude mcp add --transport http imap-mcp https://<your-app>.vercel.app/api/mcp`, then `/mcp` → **imap-mcp** → **Authenticate**. The status page shows this command ready to copy.
 
@@ -117,9 +109,6 @@ Database tables and your login are created automatically on the first request. T
 
 The status page then lists every mailbox with its connection test. Connected agents pick up the new mailbox on their next request; there's no need to reconnect.
 
-<details>
-<summary>Screenshots</summary>
-
    <img src="docs/mailbox-1-project.png" alt="Vercel project" width="400">
 
    <img src="docs/mailbox-2-env-vars.png" alt="Settings: Environment Variables" width="480">
@@ -130,7 +119,6 @@ The status page then lists every mailbox with its connection test. Connected age
 
    <img src="docs/mailbox-5-redeploy.png" alt="Redeploy dialog" width="480">
 
-</details>
 
 ### Mailbox passwords
 
