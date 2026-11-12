@@ -12,7 +12,8 @@ export const APP_URL = (
 /** The MCP endpoint. OAuth access tokens are audience-bound to this exact URL. */
 export const MCP_URL = `${APP_URL}/api/mcp`;
 
-export const ALLOW_SEND = process.env.ALLOW_SEND === "true";
+/** Sending (of drafts the user approved in chat) is on unless ALLOW_SEND=false. */
+export const ALLOW_SEND = process.env.ALLOW_SEND !== "false";
 
 export const DATABASE_URL =
   process.env.DATABASE_URL || process.env.POSTGRES_URL || "";

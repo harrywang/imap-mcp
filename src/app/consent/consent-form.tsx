@@ -65,7 +65,8 @@ export function ConsentForm() {
         <p className="mb-2">It will be able to use your MCP mail tools:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Search and read email in every configured mailbox</li>
-          <li>Create drafts, move messages, mark read or unread (and send, if you turned sending on)</li>
+          <li>Create drafts, move messages, mark read or unread</li>
+          <li>Send a draft, only after you approve it in the chat</li>
         </ul>
         {error && <p className="mt-3 text-destructive">{error}</p>}
       </CardContent>

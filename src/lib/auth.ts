@@ -8,11 +8,14 @@ import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { Pool } from "pg";
 import { APP_URL, DATABASE_URL, MCP_URL } from "./config";
 
+/** Shared Postgres pool (Better Auth tables plus the send log). */
+export const db = new Pool({ connectionString: DATABASE_URL || undefined, max: 3 });
+
 export const auth = betterAuth({
   baseURL: APP_URL,
   basePath: "/api/auth",
   trustedOrigins: [APP_URL],
-  database: new Pool({ connectionString: DATABASE_URL || undefined, max: 3 }),
+  database: db,
   // Single-user app: the one account is created from env vars by ensureSetup().
   emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 12 },
   session: { expiresIn: 60 * 60 * 24 * 7 },

@@ -77,12 +77,12 @@ async function Dashboard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {ALLOW_SEND ? <Send className="size-4" /> : <FileText className="size-4" />}
-            {ALLOW_SEND ? "Sending is on" : "Drafts only"}
+            {ALLOW_SEND ? "Sending with your approval" : "Drafts only"}
           </CardTitle>
           <CardDescription>
             {ALLOW_SEND
-              ? "Agents can send email directly. Remove ALLOW_SEND to go back to drafts only."
-              : "Agents save replies to your Drafts folder and you send them yourself. Set ALLOW_SEND=true to let it send."}
+              ? "Agents save every message as a draft, show it to you, and send it only after you say yes in the chat. Set ALLOW_SEND=false for drafts only."
+              : "Agents save replies to your Drafts folder and you send them yourself. Remove ALLOW_SEND=false to allow sending with your approval."}
           </CardDescription>
         </CardHeader>
       </Card>

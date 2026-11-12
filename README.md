@@ -7,7 +7,7 @@ A personal MCP server that gives AI agents (Claude, ChatGPT, Cursor, VS Code, or
 - **Next.js 16 + Better Auth + shadcn/ui**, deployed on Vercel with a Neon Postgres database. One Vercel account covers everything.
 - **OAuth login, nothing secret in the URL.** Your agent registers itself (dynamic client registration). You sign in once and approve it on a consent page. Access tokens last 1 hour, refresh tokens 30 days.
 - **Multiple mailboxes, kept apart.** Add up to 20 (`MAIL_2`, `MAIL_3`, …). Every result says which mailbox it came from, replies go out from the mailbox the original arrived in, and when it's unclear which one you mean, the agent is told to ask instead of guessing.
-- **Drafts by default.** The agent saves replies to your Drafts folder and you send them yourself. Set `ALLOW_SEND=true` to let it send.
+- **Nothing is sent without your yes.** The agent saves every message as a draft, shows it to you, and can send that exact draft only after you approve it in the chat. Set `ALLOW_SEND=false` for drafts only.
 - **Mail passwords never touch the database.** They live only in Vercel environment variables. The database holds login and OAuth data.
 
 ## Deploy
@@ -16,6 +16,8 @@ A personal MCP server that gives AI agents (Claude, ChatGPT, Cursor, VS Code, or
 
 1. Click **Deploy** and approve creating the Neon database.
 2. Fill in 4 values: `MAIL_1`, `MAIL_1_PASSWORD`, `ADMIN_PASSWORD` (12+ characters) and `BETTER_AUTH_SECRET` (run `openssl rand -base64 32`).
+
+   <img src="docs/vercel-env.png" alt="Vercel's Environment Variables form" width="560">
 3. Open your deployment, sign in with your `ADMIN_PASSWORD` (the username is filled in for you), and check that the mailbox test shows ✅.
 
    The username is `admin@imap-mcp.local` and doesn't matter. This app has exactly one login, sign-up is disabled, and the sign-in page fills it in for you, so the password is the only thing that protects it. It has to look like an email address because the login system (Better Auth's email-and-password sign-in) only accepts email-formatted usernames. No mail is ever sent to it, and it doesn't need to be a real address or match your mailbox. To change it, set `ADMIN_EMAIL`.
@@ -33,13 +35,14 @@ Database tables and your login are created automatically on the first request. T
 | `BETTER_AUTH_SECRET` | yes | Random secret. Rotating it invalidates all sessions and tokens. |
 | `DATABASE_URL` | auto | Set by the Neon integration. |
 | `ADMIN_EMAIL` | no | Login username, prefilled on the sign-in page. Defaults to `admin@imap-mcp.local`. No mail is sent to it. |
-| `ALLOW_SEND` | no | `true` adds a `send_email` tool. Default: drafts only. |
+| `SEND_LIMIT_PER_HOUR` | no | Max emails each mailbox can send per hour. Default 10. |
+| `ALLOW_SEND` | no | `false` removes `send_draft`, so agents can only save drafts. Default: sending approved drafts is allowed. |
 | `MAIL_<n>`, `MAIL_<n>_PASSWORD` | no | More mailboxes: `MAIL_2`, `MAIL_3`, … |
 | `MAIL_<n>_NAME` | no | Friendly name, also used as the From display name. |
 | `MAIL_<n>_USERNAME` | no | IMAP/SMTP login, if it differs from the address. |
 | `MAIL_<n>_IMAP_HOST` / `_IMAP_PORT` / `_SMTP_HOST` / `_SMTP_PORT` | no | Override detection. Port 993/465 use TLS; other ports use STARTTLS or plain. |
 
-**After changing any variable in Vercel** (adding a mailbox, turning on `ALLOW_SEND`, …), redeploy: **Deployments → ⋯ on the latest one → Redeploy**. A running deployment keeps the values it was built with.
+**After changing any variable in Vercel** (adding a mailbox, setting `ALLOW_SEND`, …), redeploy: **Deployments → ⋯ on the latest one → Redeploy**. A running deployment keeps the values it was built with.
 
 ### Mailbox passwords
 
@@ -65,14 +68,14 @@ If the mailbox test on the status page shows an authentication error, this is us
 | `create_draft` | Saves to Drafts, threaded when replying. Replies come from the mailbox the original was read in. |
 | `move_email` | Move to another folder (Archive, Trash, …) |
 | `mark_read` | Mark read or unread |
-| `send_email` | Only when `ALLOW_SEND=true`. Also saves a copy to Sent. |
+| `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients and subject, so your client's approval prompt shows them. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
 
 Every tool takes an `account` (address, name or number) and every result says which mailbox it came from.
 
 With several mailboxes, the server keeps them apart:
 
 - `search_emails` and `list_folders` default to the first mailbox when `account` is left out.
-- `read_email`, `move_email`, `mark_read`, `create_draft` and `send_email` refuse to run without `account`. UIDs only mean something inside one mailbox, and mail must go out from the right address. The error tells the agent to ask you which mailbox you mean.
+- `read_email`, `move_email`, `mark_read`, `create_draft` and `send_draft` refuse to run without `account`. UIDs only mean something inside one mailbox, and mail must go out from the right address. The error tells the agent to ask you which mailbox you mean.
 - A reply has to pass both the original's UID and its Message-ID (from `read_email`). If they don't match in the chosen mailbox, which happens when a UID from one mailbox is used in another, nothing is saved or sent.
 
 ## Security and privacy
@@ -89,7 +92,16 @@ With several mailboxes, the server keeps them apart:
 - **Nothing is stored.** Each tool call connects to your mail server, does its job and disconnects. The database holds only your login, OAuth clients and tokens, and rate-limit counters. No message content, addresses or subjects.
 - **Nothing is logged or tracked.** The app doesn't log mail content and has no analytics.
 - **Your agent sees what it reads.** Messages returned by `search_emails` and `read_email` go to the agent you connected, so its provider's privacy policy applies to that content.
-- **Reading doesn't change anything.** `read_email` leaves messages unread, and nothing is sent unless you turn on `ALLOW_SEND`.
+- **Reading doesn't change anything.** `read_email` leaves messages unread.
+
+**How sending works**
+
+1. The agent saves the message to your Drafts folder with `create_draft` and shows you the full draft: From, To, Cc, Bcc, subject and body.
+2. You approve it in the chat. Clients like Claude also ask before running `send_draft`, and the prompt shows the recipients and subject. Don't set it to always-allow.
+3. `send_draft` sends that exact draft. If the draft was edited or replaced, or the recipients or subject don't match, nothing is sent.
+4. A copy goes to Sent and the draft is removed.
+
+Each mailbox can send at most 10 emails an hour (`SEND_LIMIT_PER_HOUR`). There's no way to send arbitrary text or forward messages. Set `ALLOW_SEND=false` for drafts only.
 
 **The remaining risk:** the mailbox password sits in Vercel's environment variables, which are encrypted at rest. An [app password](#mailbox-passwords) limits the damage if they ever leak: it only opens mail and you can revoke it without changing your real password.
 

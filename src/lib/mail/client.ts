@@ -3,8 +3,10 @@ import { ImapFlow, type ListResponse, type SearchObject } from "imapflow";
 import { simpleParser, type AddressObject } from "mailparser";
 import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
+import addressparser from "nodemailer/lib/addressparser";
 import { getMailAccounts, type MailAccountConfig } from "../config";
 import { detectServers, type ServerSettings } from "./autodetect";
+import { checkSendLimit, recordSend } from "./send-limit";
 
 export interface ResolvedAccount extends MailAccountConfig {
   servers: ServerSettings;
@@ -264,45 +266,150 @@ async function compose(account: ResolvedAccount, c: ImapFlow, d: Draft, keepBcc 
   // Drafts keep the Bcc header so it shows when you open the draft; sent mail never carries it.
   if (keepBcc) node.keepBcc = true;
   const raw = await node.build();
-  return { mail, raw, replyingTo };
+  return { mail, raw, replyingTo, messageId: node.messageId() };
 }
 
 export async function createDraft(account: ResolvedAccount, d: Draft) {
   return withImap(account, async (c) => {
-    const { raw, replyingTo } = await compose(account, c, d, true);
+    const { raw, replyingTo, messageId } = await compose(account, c, d, true);
     const drafts = await findSpecialFolder(c, "\\Drafts", ["Drafts", "INBOX.Drafts", "Draft"]);
     const res = await c.append(drafts, raw, ["\\Draft", "\\Seen"]);
-    return { from: account.email, savedTo: drafts, uid: res ? res.uid : undefined, replyingTo };
+    return {
+      savedTo: drafts,
+      draftUid: res ? res.uid : undefined,
+      draftMessageId: messageId,
+      draft: {
+        from: account.email,
+        to: emails(d.to),
+        cc: emails(d.cc),
+        bcc: emails(d.bcc),
+        subject: d.subject,
+        body: d.body,
+      },
+      replyingTo,
+    };
   });
 }
 
-export async function sendEmail(account: ResolvedAccount, d: Draft) {
-  return withImap(account, async (c) => {
-    const { mail, raw, replyingTo } = await compose(account, c, d);
-    const { smtpHost, smtpPort } = account.servers;
-    const transport = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: { user: account.username, pass: account.password },
-    });
-    const info = await transport.sendMail({ ...mail, raw });
-    // Many IMAP servers don't save SMTP-sent mail; keep a copy in Sent.
-    let savedTo: string | undefined;
-    try {
-      savedTo = await findSpecialFolder(c, "\\Sent", ["Sent", "INBOX.Sent", "Sent Items", "Sent Messages"]);
-      await c.append(savedTo, raw, ["\\Seen"]);
-    } catch {
-      savedTo = undefined;
+/** "Ann <a@x.com>, b@y.com" -> ["a@x.com", "b@y.com"] */
+function emails(list?: string): string[] {
+  if (!list) return [];
+  const flat = (xs: ReturnType<typeof addressparser>): string[] =>
+    xs.flatMap((x) => ("group" in x && x.group ? flat(x.group) : x.address ? [x.address] : []));
+  return flat(addressparser(list));
+}
+
+/** Removes Bcc headers (with folded continuation lines) so recipients never see them. */
+function stripBcc(source: Buffer): Buffer {
+  const text = source.toString("binary");
+  const end = text.search(/\r?\n\r?\n/);
+  if (end < 0) return source;
+  const headers = text.slice(0, end).split(/\r?\n/);
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of headers) {
+    if (/^[ \t]/.test(line)) {
+      if (!skipping) kept.push(line);
+      continue;
     }
-    return {
-      from: account.email,
-      messageId: info.messageId,
-      accepted: info.accepted,
-      rejected: info.rejected,
-      copySavedTo: savedTo,
-      replyingTo,
-    };
+    skipping = /^bcc:/i.test(line);
+    if (!skipping) kept.push(line);
+  }
+  return Buffer.from(kept.join("\r\n") + text.slice(end), "binary");
+}
+
+const addresses = (a?: AddressObject | AddressObject[]) =>
+  (a ? (Array.isArray(a) ? a : [a]) : []).flatMap((x) => x.value.map((v) => v.address).filter(Boolean) as string[]);
+
+/**
+ * Sends an existing draft exactly as saved: the one the user was shown. The draft is
+ * identified by UID and Message-ID, so a different or edited draft is never sent by mistake.
+ */
+/** What the user approved. Shown in the client's approval prompt and checked against the draft. */
+export interface ApprovedSend {
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+}
+
+const sameSet = (a: string[], b: string[]) => {
+  const norm = (x: string[]) => [...new Set(x.map((v) => v.trim().toLowerCase()).filter(Boolean))].sort().join(",");
+  return norm(a) === norm(b);
+};
+
+export async function sendDraft(
+  account: ResolvedAccount,
+  draftUid: number,
+  draftMessageId: string,
+  approved: ApprovedSend,
+) {
+  await checkSendLimit(account.email);
+  return withImap(account, async (c) => {
+    const drafts = await findSpecialFolder(c, "\\Drafts", ["Drafts", "INBOX.Drafts", "Draft"]);
+    const lock = await c.getMailboxLock(drafts);
+    try {
+      const msg = await c.fetchOne(String(draftUid), { source: true }, { uid: true });
+      if (!msg || !msg.source) throw new Error(`No draft with UID ${draftUid} in ${drafts} of ${account.email}. Nothing was sent.`);
+      const p = await simpleParser(msg.source);
+      if (!p.messageId || normId(p.messageId) !== normId(draftMessageId)) {
+        throw new Error(
+          `Draft ${draftUid} in ${account.email} is not the draft you showed the user (it may have been edited or ` +
+            "replaced). Read it again with read_email, show it to the user, and ask again. Nothing was sent.",
+        );
+      }
+      const fromAddrs = addresses(p.from).map((x) => x.toLowerCase());
+      if (fromAddrs.length !== 1 || fromAddrs[0] !== account.email.toLowerCase()) {
+        throw new Error(`This draft is not from ${account.email}. Nothing was sent.`);
+      }
+      const actual = { to: addresses(p.to), cc: addresses(p.cc), bcc: addresses(p.bcc), subject: p.subject ?? "" };
+      const mismatches = [
+        !sameSet(actual.to, approved.to) && `to is ${actual.to.join(", ") || "(none)"}`,
+        !sameSet(actual.cc, approved.cc) && `cc is ${actual.cc.join(", ") || "(none)"}`,
+        !sameSet(actual.bcc, approved.bcc) && `bcc is ${actual.bcc.join(", ") || "(none)"}`,
+        actual.subject.trim() !== approved.subject.trim() && `subject is "${actual.subject}"`,
+      ].filter(Boolean);
+      if (mismatches.length) {
+        throw new Error(
+          `The draft doesn't match what was approved: its ${mismatches.join("; ")}. Show the user the actual ` +
+            "draft and ask again. Nothing was sent.",
+        );
+      }
+      const recipients = [...actual.to, ...actual.cc, ...actual.bcc];
+      if (recipients.length === 0) throw new Error("This draft has no recipients. Nothing was sent.");
+
+      const raw = stripBcc(msg.source);
+      const { smtpHost, smtpPort } = account.servers;
+      const transport = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: { user: account.username, pass: account.password },
+      });
+      const info = await transport.sendMail({ envelope: { from: account.email, to: recipients }, raw });
+      await recordSend(account.email);
+
+      // Keep a copy in Sent (many servers don't save SMTP-sent mail), then remove the draft.
+      let copySavedTo: string | undefined;
+      try {
+        copySavedTo = await findSpecialFolder(c, "\\Sent", ["Sent", "INBOX.Sent", "Sent Items", "Sent Messages"]);
+        await c.append(copySavedTo, raw, ["\\Seen"]);
+      } catch {
+        copySavedTo = undefined;
+      }
+      await c.messageDelete(String(draftUid), { uid: true });
+      return {
+        from: account.email,
+        sentTo: recipients,
+        subject: p.subject,
+        accepted: info.accepted,
+        rejected: info.rejected,
+        copySavedTo,
+        draftRemoved: true,
+      };
+    } finally {
+      lock.release();
+    }
   });
 }
 
