@@ -14,14 +14,79 @@ A personal MCP server that gives AI agents (Claude, ChatGPT, Cursor, VS Code, or
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fharrywang%2Fimap-mcp&project-name=imap-mcp&repository-name=imap-mcp&env=MAIL_1,MAIL_1_PASSWORD,ADMIN_PASSWORD,BETTER_AUTH_SECRET&envDescription=Your%20mailbox%20address%20and%20password%2C%20a%20password%20for%20this%20app%20%2812%2B%20chars%29%2C%20and%20a%20random%20secret%20%28run%3A%20openssl%20rand%20-base64%2032%29.&envLink=https%3A%2F%2Fgithub.com%2Fharrywang%2Fimap-mcp%23environment-variables&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%2C%22protocol%22%3A%22storage%22%7D%5D)
 
-1. Click **Deploy** and approve creating the Neon database.
-2. Fill in 4 values: `MAIL_1`, `MAIL_1_PASSWORD`, `ADMIN_PASSWORD` (12+ characters; run `openssl rand -base64 24` and save it in your password manager) and `BETTER_AUTH_SECRET` (run `openssl rand -base64 32`).
+### 1. Create the project
 
-   <img src="docs/vercel-env.png" alt="Vercel's Environment Variables form" width="560">
-3. Open your deployment, sign in with your `ADMIN_PASSWORD` (the username is filled in for you), and check that the mailbox test shows ✅.
+Click **Deploy**. Pick your Vercel team, name the new private repository (Vercel copies this repo into your GitHub account), and click **Create**.
 
-   The username is `admin@imap-mcp.local` and doesn't matter. This app has exactly one login, sign-up is disabled, and the sign-in page fills it in for you, so the password is the only thing that protects it. It has to look like an email address because the login system (Better Auth's email-and-password sign-in) only accepts email-formatted usernames. No mail is ever sent to it, and it doesn't need to be a real address or match your mailbox. To change it, set `ADMIN_EMAIL`.
-4. Add the connector URL (`https://<your-app>/api/mcp`) to your MCP client as a remote HTTP server with OAuth. For example, in claude.ai use **Settings → Connectors → Add custom connector**; in Claude Code run the command shown on the page. Other clients that support remote MCP servers with OAuth (ChatGPT connectors, Cursor, VS Code, …) work the same way.
+   <img src="docs/deploy-1-new-project.png" alt="Vercel New Project: repository name and team" width="480">
+
+### 2. Add the Neon database
+
+Click **Add** next to Neon, then:
+
+1. Accept the terms.
+2. Choose the **Free** plan and leave **Auth** and **Realtime** off. This app has its own login and doesn't use them.
+3. Click **Create**, then **Done** when the database is ready.
+
+The Free plan (1 GB, 100 compute hours a month) is plenty for this app. It's only offered if your Vercel team doesn't have Neon yet; a team that already uses Neon on a paid plan puts new databases on that plan. A personal Hobby team is the easy way to stay free.
+
+<details>
+<summary>Screenshots</summary>
+
+   <img src="docs/deploy-2-add-neon.png" alt="Add Products: Neon" width="480">
+
+   <img src="docs/deploy-3-neon-terms.png" alt="Neon terms of service" width="480">
+
+   <img src="docs/deploy-4-neon-free-plan.png" alt="Neon plan: Free, Auth and Realtime off" width="480">
+
+   <img src="docs/deploy-5-neon-confirm.png" alt="Neon confirmation" width="480">
+
+   <img src="docs/deploy-6-neon-ready.png" alt="Neon database ready" width="480">
+
+</details>
+
+### 3. Fill in 4 values and deploy
+
+| Name | Value |
+|---|---|
+| `MAIL_1` | Your mailbox address |
+| `MAIL_1_PASSWORD` | Its password, or an [app password](#mailbox-passwords) |
+| `ADMIN_PASSWORD` | Your login for this app, 12+ characters. Run `openssl rand -base64 24` and save it in your password manager. |
+| `BETTER_AUTH_SECRET` | Run `openssl rand -base64 32`. You never type this one. |
+
+   <img src="docs/deploy-7-env-vars.png" alt="Vercel: database added, environment variables, Deploy" width="480">
+
+Click **Deploy**.
+
+### 4. Sign in
+
+Open your deployment (`https://<your-app>.vercel.app`), sign in with your `ADMIN_PASSWORD`, and check that the mailbox test shows ✅.
+
+The username, `admin@imap-mcp.local`, is filled in for you and doesn't matter. This app has exactly one login and sign-up is disabled, so the password is the only thing that protects it. The username has to look like an email address because Better Auth's email-and-password sign-in requires one, but no mail is ever sent to it. To change it, set `ADMIN_EMAIL`.
+
+### 5. Connect Claude
+
+1. In claude.ai or Claude Desktop, open **Settings → Connectors → Add custom connector**. Enter a name and your connector URL, `https://<your-app>.vercel.app/api/mcp`, and click **Continue**.
+2. Keep the detected options, **Sign in now** and **Use Claude's published identity**, and click **Add**.
+3. Claude Desktop asks you to confirm in the browser. Click **Continue connecting**.
+4. Sign in with your `ADMIN_PASSWORD`, then click **Allow**. The consent page shows which app is connecting and where access is sent; only allow it if you just started the connection yourself.
+
+<details>
+<summary>Screenshots</summary>
+
+   <img src="docs/connect-1-url.png" alt="Claude: Add custom connector, name and URL" width="480">
+
+   <img src="docs/connect-2-auth.png" alt="Claude: Sign in now, Use Claude's published identity" width="480">
+
+   <img src="docs/connect-3-desktop.png" alt="Claude Desktop: Continue connecting" width="480">
+
+   <img src="docs/connect-4-consent.png" alt="Consent page: Allow Claude?" width="400">
+
+</details>
+
+**Claude Code:** run `claude mcp add --transport http imap-mcp https://<your-app>.vercel.app/api/mcp`, then `/mcp` → **imap-mcp** → **Authenticate**. The status page shows this command ready to copy.
+
+**Other clients** that support remote MCP servers with OAuth (ChatGPT connectors, Cursor, VS Code, …) work the same way: add the connector URL, sign in, allow.
 
 Database tables and your login are created automatically on the first request. There is no migration step.
 
@@ -43,6 +108,29 @@ Database tables and your login are created automatically on the first request. T
 | `MAIL_<n>_IMAP_HOST` / `_IMAP_PORT` / `_SMTP_HOST` / `_SMTP_PORT` | no | Override detection. Port 993/465 use TLS; other ports use STARTTLS or plain. |
 
 **After changing any variable in Vercel** (adding a mailbox, setting `ALLOW_SEND`, …), redeploy: **Deployments → ⋯ on the latest one → Redeploy**. A running deployment keeps the values it was built with.
+
+### Add more mailboxes
+
+1. In Vercel, open your project and go to **Settings → Environment Variables → Add Environment Variable**.
+2. Add `MAIL_2` (the address) and `MAIL_2_PASSWORD`. Use the **Secret** type so the values can't be read back. For a third mailbox use `MAIL_3`, and so on, up to 20.
+3. Click **Redeploy** in the prompt that appears (or **Deployments → ⋯ → Redeploy**), then **Redeploy** again to confirm.
+
+The status page then lists every mailbox with its connection test. Connected agents pick up the new mailbox on their next request; there's no need to reconnect.
+
+<details>
+<summary>Screenshots</summary>
+
+   <img src="docs/mailbox-1-project.png" alt="Vercel project" width="400">
+
+   <img src="docs/mailbox-2-env-vars.png" alt="Settings: Environment Variables" width="480">
+
+   <img src="docs/mailbox-3-add.png" alt="Add MAIL_2 and MAIL_2_PASSWORD as Secret" width="480">
+
+   <img src="docs/mailbox-4-redeploy-prompt.png" alt="Prompt: Redeploy" width="400">
+
+   <img src="docs/mailbox-5-redeploy.png" alt="Redeploy dialog" width="480">
+
+</details>
 
 ### Mailbox passwords
 
