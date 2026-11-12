@@ -252,7 +252,8 @@ export function createMailServer() {
     {
       description: 'Move messages to another folder (e.g. "Archive", "Trash").',
       inputSchema: z.object({ account: accountRequired, folder, uids, destination: z.string() }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      // Moving to Spam or Trash can hide mail, so clients should ask before running it.
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async (a) => {
       try {

@@ -61,6 +61,8 @@ async function withImap<T>(account: ResolvedAccount, fn: (c: ImapFlow) => Promis
     host: imapHost,
     port: imapPort,
     secure: imapPort === 993,
+    // On other ports, require STARTTLS: fail rather than send the password unencrypted.
+    ...(imapPort === 993 ? {} : { doSTARTTLS: true }),
     auth: { user: account.username, pass: account.password },
     logger: false,
     connectionTimeout: 15_000,
@@ -384,6 +386,8 @@ export async function sendDraft(
         host: smtpHost,
         port: smtpPort,
         secure: smtpPort === 465,
+        // On other ports (e.g. 587), require STARTTLS: fail rather than send the password unencrypted.
+        requireTLS: smtpPort !== 465,
         auth: { user: account.username, pass: account.password },
       });
       const info = await transport.sendMail({ envelope: { from: account.email, to: recipients }, raw });

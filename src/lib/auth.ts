@@ -40,6 +40,8 @@ export const auth = betterAuth({
       clientRegistrationDefaultApplicationType: "infer",
       accessTokenExpiresIn: 60 * 60,
       refreshTokenExpiresIn: 60 * 60 * 24 * 30,
+      // A used refresh token is invalid immediately (the plugin's default allows 30s of reuse).
+      refreshTokenReuseInterval: 0,
     }),
     cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
     nextCookies(),
