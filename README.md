@@ -15,7 +15,7 @@ A personal MCP server that gives AI agents (Claude, ChatGPT, Cursor, VS Code, or
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fharrywang%2Fimap-mcp&project-name=imap-mcp&repository-name=imap-mcp&env=MAIL_1,MAIL_1_PASSWORD,ADMIN_PASSWORD,BETTER_AUTH_SECRET&envDescription=Your%20mailbox%20address%20and%20password%2C%20a%20password%20for%20this%20app%20%2812%2B%20chars%29%2C%20and%20a%20random%20secret%20%28run%3A%20openssl%20rand%20-base64%2032%29.&envLink=https%3A%2F%2Fgithub.com%2Fharrywang%2Fimap-mcp%23environment-variables&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22database%22%2C%22protocol%22%3A%22storage%22%7D%5D)
 
 1. Click **Deploy** and approve creating the Neon database.
-2. Fill in 4 values: `MAIL_1`, `MAIL_1_PASSWORD`, `ADMIN_PASSWORD` (12+ characters) and `BETTER_AUTH_SECRET` (run `openssl rand -base64 32`).
+2. Fill in 4 values: `MAIL_1`, `MAIL_1_PASSWORD`, `ADMIN_PASSWORD` (12+ characters; run `openssl rand -base64 24` and save it in your password manager) and `BETTER_AUTH_SECRET` (run `openssl rand -base64 32`).
 
    <img src="docs/vercel-env.png" alt="Vercel's Environment Variables form" width="560">
 3. Open your deployment, sign in with your `ADMIN_PASSWORD` (the username is filled in for you), and check that the mailbox test shows ✅.
