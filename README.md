@@ -144,7 +144,7 @@ If the mailbox test on the status page shows an authentication error, this is us
 | `create_draft` | Saves to Drafts, threaded when replying. Replies come from the mailbox the original was read in. |
 | `move_email` | Move to another folder (Archive, Trash, …) |
 | `mark_read` | Mark read or unread |
-| `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients and subject, so your client's approval prompt shows them. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
+| `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients, subject and full body, so your client's approval prompt shows the whole email. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
 
 Every tool takes an `account` (address, name or number) and every result says which mailbox it came from.
 
@@ -173,8 +173,8 @@ With several mailboxes, the server keeps them apart:
 **How sending works**
 
 1. The agent saves the message to your Drafts folder with `create_draft` and shows you the full draft: From, To, Cc, Bcc, subject and body.
-2. You approve it in the chat. Clients like Claude also ask before running `send_draft`, and the prompt shows the recipients and subject. Don't set it to always-allow.
-3. `send_draft` sends that exact draft. If the draft was edited or replaced, or the recipients or subject don't match, nothing is sent.
+2. You approve it in the chat. Clients like Claude also ask before running `send_draft`, and the prompt shows the recipients, subject and full body. Don't set it to always-allow.
+3. `send_draft` sends that exact draft. If the draft was edited or replaced, or the recipients, subject or body don't match what you approved, nothing is sent.
 4. A copy goes to Sent and the draft is removed.
 
 Each mailbox can send at most 10 emails an hour (`SEND_LIMIT_PER_HOUR`). There's no way to send arbitrary text or forward messages. Set `ALLOW_SEND=false` for drafts only.

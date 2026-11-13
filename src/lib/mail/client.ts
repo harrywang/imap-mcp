@@ -69,6 +69,9 @@ async function withImap<T>(account: ResolvedAccount, fn: (c: ImapFlow) => Promis
     greetingTimeout: 10_000,
     socketTimeout: 30_000,
   });
+  // A dropped connection is reported as an "error" event; without a listener Node treats it as an
+  // uncaught exception. The failing operation still rejects, so the tool returns a normal error.
+  client.on("error", (err) => console.error(`IMAP ${imapHost}: ${err.message}`));
   await client.connect();
   try {
     return await fn(client);
@@ -333,7 +336,17 @@ export interface ApprovedSend {
   cc: string[];
   bcc: string[];
   subject: string;
+  body: string;
 }
+
+/** Compares bodies ignoring only line-ending style and trailing whitespace, which MIME encoding may change. */
+const normBody = (t: string) =>
+  t
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/[ \t]+$/, ""))
+    .join("\n")
+    .trim();
 
 const sameSet = (a: string[], b: string[]) => {
   const norm = (x: string[]) => [...new Set(x.map((v) => v.trim().toLowerCase()).filter(Boolean))].sort().join(",");
@@ -371,6 +384,10 @@ export async function sendDraft(
         !sameSet(actual.bcc, approved.bcc) && `bcc is ${actual.bcc.join(", ") || "(none)"}`,
         actual.subject.trim() !== approved.subject.trim() && `subject is "${actual.subject}"`,
       ].filter(Boolean);
+      const storedBody = p.text ?? (p.html ? htmlToText(p.html) : "");
+      if (normBody(storedBody) !== normBody(approved.body)) {
+        mismatches.push(`body is:\n---\n${storedBody.trim()}\n---`);
+      }
       if (mismatches.length) {
         throw new Error(
           `The draft doesn't match what was approved: its ${mismatches.join("; ")}. Show the user the actual ` +
