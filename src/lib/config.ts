@@ -9,6 +9,13 @@ export const APP_URL = (
     : "http://localhost:3000")
 ).replace(/\/+$/, "");
 
+/**
+ * How the server reaches itself, for fetching its own token-signing keys. Defaults to APP_URL.
+ * Self-hosted setups behind a proxy set this (e.g. http://localhost:3000) because a container
+ * often can't reach its own public HTTPS address.
+ */
+export const INTERNAL_URL = (process.env.INTERNAL_URL || APP_URL).replace(/\/+$/, "");
+
 /** The MCP endpoint. OAuth access tokens are audience-bound to this exact URL. */
 export const MCP_URL = `${APP_URL}/api/mcp`;
 

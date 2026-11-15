@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Self-contained server bundle for Docker (ignored by Vercel, which builds its own way).
+  output: "standalone",
   /* config options here */
   cacheComponents: true,
   // No page may be embedded in another site, so the consent page can't be used for clickjacking.

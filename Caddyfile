@@ -1,0 +1,5 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN automatically.
+# It replaces any client-sent X-Forwarded-For with the real client IP.
+{$DOMAIN} {
+	reverse_proxy app:3000
+}

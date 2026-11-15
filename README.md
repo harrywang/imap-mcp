@@ -82,6 +82,37 @@ The username, `admin@imap-mcp.local`, is filled in for you and doesn't matter. T
 
 Database tables and your login are created automatically on the first request. There is no migration step.
 
+## Self-host with Docker
+
+Run it on your own server instead of Vercel. The included `docker-compose.yml` starts three containers: the app, Postgres, and [Caddy](https://caddyserver.com), which gets a free HTTPS certificate automatically.
+
+You need a server with Docker, ports 80 and 443 open, and a domain (or subdomain) pointing at it. MCP clients like claude.ai only connect over HTTPS.
+
+```bash
+git clone https://github.com/harrywang/imap-mcp.git
+cd imap-mcp
+cp .env.example .env
+```
+
+Edit `.env`:
+
+- Fill in `MAIL_1`, `MAIL_1_PASSWORD`, `ADMIN_PASSWORD` and `BETTER_AUTH_SECRET` as in [step 3](#3-fill-in-4-values-and-deploy).
+- Uncomment and set `DOMAIN` (for example `mail-mcp.example.com`) and `POSTGRES_PASSWORD` (`openssl rand -hex 16`).
+- Delete the `DATABASE_URL` and `APP_URL` lines. Docker Compose sets both from `DOMAIN` and `POSTGRES_PASSWORD`.
+- **Put any value containing `$` in single quotes**, like `MAIL_1_PASSWORD='pa$word'`. Docker Compose otherwise treats `$` as a variable and silently cuts the value.
+
+Then start it:
+
+```bash
+docker compose up -d
+```
+
+Open `https://<your-domain>`, sign in, and connect your MCP client to `https://<your-domain>/api/mcp`, as in [step 5](#5-connect-claude). Database tables are created on first start, and Postgres data persists in a Docker volume.
+
+To update: `git pull && docker compose up -d --build`.
+
+**Without Docker.** Any server with Node.js 24 and Postgres works: `pnpm install && pnpm build && pnpm start`, with `DATABASE_URL` and `APP_URL` (your public HTTPS URL) set. Put it behind an HTTPS reverse proxy that sets the real client IP in `X-Forwarded-For` (Caddy and nginx do), and don't expose port 3000 directly, since the login rate limit relies on that header. If the server can't reach its own public URL, set `INTERNAL_URL=http://localhost:3000`.
+
 ## Environment variables
 
 | Variable | Required | Notes |
@@ -90,7 +121,9 @@ Database tables and your login are created automatically on the first request. T
 | `MAIL_1_PASSWORD` | yes | Mailbox password, or an app password (see below). |
 | `ADMIN_PASSWORD` | yes | Password for signing in to this app. Must be at least 12 characters; if it's shorter, the app shows a "Finish setup" page and won't let agents connect. |
 | `BETTER_AUTH_SECRET` | yes | Random secret. Rotating it invalidates all sessions and tokens. |
-| `DATABASE_URL` | auto | Set by the Neon integration. |
+| `DATABASE_URL` | auto | Set by the Neon integration on Vercel, or by Docker Compose. Any Postgres connection string works. |
+| `APP_URL` | self-host | Your public HTTPS URL. Set automatically on Vercel and by Docker Compose (from `DOMAIN`). |
+| `INTERNAL_URL` | no | How the server reaches itself to fetch its token-signing keys, when it can't reach its own public URL. Docker Compose sets `http://localhost:3000`. |
 | `ADMIN_EMAIL` | no | Login username, prefilled on the sign-in page. Defaults to `admin@imap-mcp.local`. No mail is sent to it. |
 | `SEND_LIMIT_PER_HOUR` | no | Max emails each mailbox can send per hour. Default 10. |
 | `ALLOW_SEND` | no | `false` removes `send_draft`, so agents can only save drafts. Default: sending approved drafts is allowed. |

@@ -1,7 +1,7 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { auth } from "@/lib/auth";
-import { MCP_URL } from "@/lib/config";
+import { INTERNAL_URL, MCP_URL } from "@/lib/config";
 import { setupFailure } from "@/lib/setup";
 import { createMailServer } from "@/lib/mail/tools";
 
@@ -12,6 +12,7 @@ const mcpHandler = createMcpHandler(() => createMailServer());
 
 const protectedHandler = requireMcpAuth(auth, (request) => mcpHandler.fetch(request), {
   resource: MCP_URL,
+  jwksUrl: `${INTERNAL_URL}/api/auth/jwks`,
 });
 
 async function handler(request: Request) {
