@@ -108,11 +108,14 @@ async function MailboxStatus() {
           <span className="truncate font-medium">{a.email}</span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">{results[i].detail}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Sends as {a.senderName ? `${a.senderName} <${a.email}>` : a.email}
+        </p>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
           IMAP {a.servers.imapHost}:{a.servers.imapPort} · SMTP {a.servers.smtpHost}:{a.servers.smtpPort} · {a.servers.source}
         </p>
       </div>
-      <Badge variant="secondary">#{a.slot}</Badge>
+      <Badge variant="secondary">{a.label ? `${a.label} · #${a.slot}` : `#${a.slot}`}</Badge>
     </div>
   ));
 }

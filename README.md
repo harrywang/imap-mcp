@@ -128,7 +128,8 @@ To update: `git pull && docker compose up -d --build`.
 | `SEND_LIMIT_PER_HOUR` | no | Max emails each mailbox can send per hour. Default 10. |
 | `ALLOW_SEND` | no | `false` removes `send_draft`, so agents can only save drafts. Default: sending approved drafts is allowed. |
 | `MAIL_<n>`, `MAIL_<n>_PASSWORD` | no | More mailboxes: `MAIL_2`, `MAIL_3`, … |
-| `MAIL_<n>_NAME` | no | Friendly name, also used as the From display name. |
+| `MAIL_<n>_LABEL` | no | **Internal label** agents use to pick the mailbox, like `work`, `gmail` or `yahoo`. Recipients never see it. Must be unique. You can always pick a mailbox by its address or number too. |
+| `MAIL_<n>_NAME` | no | **Sender name** recipients see in the From line, like `Harry Wang`. Not used to pick mailboxes, so several mailboxes can share it. Without it, mail goes out as the bare address. |
 | `MAIL_<n>_USERNAME` | no | IMAP/SMTP login, if it differs from the address. |
 | `MAIL_<n>_IMAP_HOST` / `_IMAP_PORT` / `_SMTP_HOST` / `_SMTP_PORT` | no | Override detection. Port 993/465 use TLS; other ports use STARTTLS or plain. |
 
@@ -139,6 +140,13 @@ To update: `git pull && docker compose up -d --build`.
 1. In Vercel, open your project and go to **Settings → Environment Variables → Add Environment Variable**.
 2. Add `MAIL_2` (the address) and `MAIL_2_PASSWORD`. Use the **Secret** type so the values can't be read back. For a third mailbox use `MAIL_3`, and so on, up to 20.
 3. Click **Redeploy** in the prompt that appears (or **Deployments → ⋯ → Redeploy**), then **Redeploy** again to confirm.
+
+Optionally give each mailbox two names, which do different jobs:
+
+| Variable | What it's for | Example |
+|---|---|---|
+| `MAIL_2_LABEL` | Internal label: what you call the mailbox when talking to the agent ("check my *paperfox support* inbox"). Recipients never see it. | `paperfox support` |
+| `MAIL_2_NAME` | Sender name: what recipients see in the From line of mail you send. | `Harry Wang` |
 
 The status page then lists every mailbox with its connection test. Connected agents pick up the new mailbox on their next request; there's no need to reconnect.
 
@@ -179,7 +187,7 @@ If the mailbox test on the status page shows an authentication error, this is us
 | `mark_read` | Mark read or unread |
 | `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients, subject and full body, so your client's approval prompt shows the whole email. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
 
-Every tool takes an `account` (address, name or number) and every result says which mailbox it came from.
+Every tool takes an `account` (address, label or number) and every result says which mailbox it came from.
 
 With several mailboxes, the server keeps them apart:
 

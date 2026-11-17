@@ -28,10 +28,13 @@ export async function resolveAccount(account: MailAccountConfig): Promise<Resolv
 }
 
 /**
- * Finds an account by name, email or slot number. No selector means the first account, unless
+ * Finds an account by email, label or slot number (or an unambiguous sender name). No selector means the first account, unless
  * `explicit` is set and several mailboxes exist: UIDs are only meaningful inside one mailbox, and
  * writes must come from the right address, so those calls have to name the mailbox.
  */
+/** "work (you@company.com)" or just the address when there's no label. */
+const describeAccount = (a: MailAccountConfig) => (a.label ? `${a.label} (${a.email})` : a.email);
+
 export async function getAccount(selector?: string, opts: { explicit?: boolean } = {}): Promise<ResolvedAccount> {
   const accounts = getMailAccounts();
   if (accounts.length === 0) throw new Error("No mailbox configured (set MAIL_1 and MAIL_1_PASSWORD).");
@@ -46,11 +49,22 @@ export async function getAccount(selector?: string, opts: { explicit?: boolean }
     return resolveAccount(accounts[0]);
   }
   const s = selector.trim().toLowerCase();
-  const match = accounts.find(
-    (a) => a.email.toLowerCase() === s || a.name.toLowerCase() === s || String(a.slot) === s,
+  let match = accounts.find(
+    (a) => a.email.toLowerCase() === s || a.label?.toLowerCase() === s || String(a.slot) === s,
   );
+  // Older setups picked mailboxes by sender name; allow it only when it's unambiguous.
   if (!match) {
-    throw new Error(`Unknown account "${selector}". Available: ${accounts.map((a) => a.email).join(", ")}`);
+    const byName = accounts.filter((a) => a.senderName?.toLowerCase() === s);
+    if (byName.length > 1) {
+      throw new Error(
+        `"${selector}" is the sender name of several mailboxes (${byName.map((a) => a.email).join(", ")}). ` +
+          "Pick one by its email address, label, or number from list_accounts.",
+      );
+    }
+    match = byName[0];
+  }
+  if (!match) {
+    throw new Error(`Unknown account "${selector}". Available: ${accounts.map(describeAccount).join(", ")}`);
   }
   return resolveAccount(match);
 }
@@ -258,7 +272,8 @@ async function compose(account: ResolvedAccount, c: ImapFlow, d: Draft, keepBcc 
     }
   }
   const mail = {
-    from: account.name !== account.email ? `"${account.name}" <${account.email}>` : account.email,
+    // Structured so a sender name with quotes or commas can't break the header.
+    from: account.senderName ? { name: account.senderName, address: account.email } : account.email,
     to: d.to,
     cc: d.cc,
     bcc: d.bcc,

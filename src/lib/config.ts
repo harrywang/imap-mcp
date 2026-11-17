@@ -28,7 +28,10 @@ export const DATABASE_URL =
 export interface MailAccountConfig {
   /** 1-based slot number from MAIL_<n>. */
   slot: number;
-  name: string;
+  /** Internal name agents use to pick this mailbox (MAIL_<n>_LABEL). Never shown to recipients. */
+  label?: string;
+  /** Sender display name on outgoing mail (MAIL_<n>_NAME), e.g. "Harry Wang". */
+  senderName?: string;
   email: string;
   username: string;
   password: string;
@@ -40,7 +43,7 @@ export interface MailAccountConfig {
 
 /**
  * Reads MAIL_1, MAIL_1_PASSWORD, MAIL_2, ... from the environment.
- * Optional per account: MAIL_<n>_NAME, MAIL_<n>_USERNAME, MAIL_<n>_IMAP_HOST,
+ * Optional per account: MAIL_<n>_LABEL (internal name for agents), MAIL_<n>_NAME (sender name), MAIL_<n>_USERNAME, MAIL_<n>_IMAP_HOST,
  * MAIL_<n>_IMAP_PORT, MAIL_<n>_SMTP_HOST, MAIL_<n>_SMTP_PORT.
  */
 export function getMailAccounts(): MailAccountConfig[] {
@@ -53,7 +56,8 @@ export function getMailAccounts(): MailAccountConfig[] {
     accounts.push({
       slot: n,
       email,
-      name: env("NAME") ?? email,
+      label: env("LABEL"),
+      senderName: env("NAME"),
       username: env("USERNAME") ?? email,
       password: process.env[`MAIL_${n}_PASSWORD`] ?? "",
       imapHost: env("IMAP_HOST"),
@@ -85,5 +89,16 @@ export function getConfigProblems(): string[] {
   const accounts = getMailAccounts();
   if (accounts.length === 0) problems.push("No mailbox configured. Set MAIL_1 and MAIL_1_PASSWORD.");
   for (const a of accounts) if (!a.password) problems.push(`MAIL_${a.slot}_PASSWORD is not set.`);
+  const labels = new Map<string, number[]>();
+  for (const a of accounts) {
+    if (!a.label) continue;
+    const key = a.label.toLowerCase();
+    labels.set(key, [...(labels.get(key) ?? []), a.slot]);
+  }
+  for (const [label, slots] of labels) {
+    if (slots.length > 1) {
+      problems.push(`MAIL_${slots.join("_LABEL, MAIL_")}_LABEL all use the label "${label}". Labels must be unique.`);
+    }
+  }
   return problems;
 }

@@ -31,13 +31,13 @@ const fail = (e: unknown) => ({
 const account = z
   .string()
   .optional()
-  .describe("Mailbox to use: email address, name, or number from list_accounts. Defaults to the first mailbox.");
+  .describe("Mailbox to use: email address, label, or number from list_accounts. Defaults to the first mailbox.");
 // Anything that takes a UID or changes mail must name the mailbox when there are several.
 const accountRequired = z
   .string()
   .optional()
   .describe(
-    "Mailbox to use: email address, name, or number from list_accounts. Required when more than one mailbox is " +
+    "Mailbox to use: email address, label, or number from list_accounts. Required when more than one mailbox is " +
       "configured. Use the mailbox the message came from (the `account` field of search_emails/read_email results). " +
       "If unsure which mailbox the user means, ask them.",
   );
@@ -46,7 +46,7 @@ const uids = z.array(z.number().int()).min(1).max(100).describe("Message UIDs fr
 
 const draftFields = {
   account: accountRequired.describe(
-    "Mailbox to send from: email address, name, or number from list_accounts. Required when more than one mailbox " +
+    "Mailbox to send from: email address, label, or number from list_accounts. Required when more than one mailbox " +
       "is configured. When replying, use the same mailbox the original was read from. For a new message, if the " +
       "user hasn't said which address to send from, ask them.",
   ),
@@ -124,7 +124,9 @@ export function createMailServer() {
   server.registerTool(
     "list_accounts",
     {
-      description: "List the configured mailboxes and their mail servers.",
+      description:
+        "List the configured mailboxes. Pick a mailbox by its email, label, or number; senderName is only the name " +
+        "recipients see on outgoing mail.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true },
     },
@@ -133,7 +135,13 @@ export function createMailServer() {
         const accounts = await Promise.all(getMailAccounts().map(resolveAccount));
         return ok({
           sendingEnabled: ALLOW_SEND,
-          accounts: accounts.map((a) => ({ number: a.slot, name: a.name, email: a.email, imap: a.servers.imapHost })),
+          accounts: accounts.map((a) => ({
+            number: a.slot,
+            label: a.label,
+            email: a.email,
+            senderName: a.senderName,
+            imap: a.servers.imapHost,
+          })),
         });
       } catch (e) {
         return fail(e);
