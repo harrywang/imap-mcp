@@ -1,10 +1,11 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { ImapFlow, type ListResponse, type SearchObject } from "imapflow";
-import { simpleParser, type AddressObject } from "mailparser";
+import { simpleParser, type AddressObject, type Attachment } from "mailparser";
 import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import addressparser from "nodemailer/lib/addressparser";
-import { getMailAccounts, type MailAccountConfig } from "../config";
+import { ATTACHMENT_MAX_BYTES, getMailAccounts, type MailAccountConfig } from "../config";
 import { detectServers, type ServerSettings } from "./autodetect";
 import { checkSendLimit, recordSend } from "./send-limit";
 
@@ -217,11 +218,56 @@ export async function readEmail(account: ResolvedAccount, folder: string, uid: n
       replyTo: addr(p.replyTo),
       subject: p.subject,
       unread: !msg.flags?.has("\\Seen"),
-      attachments: p.attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, size: a.size })),
+      attachments: p.attachments.map(describeAttachment),
       body,
       truncated,
     };
   });
+}
+
+const sha256 = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+
+/** Index is the position get_attachment takes; inline parts (e.g. images in an HTML signature) are included. */
+const describeAttachment = (a: Attachment, index: number) => ({
+  index,
+  filename: a.filename,
+  contentType: a.contentType,
+  size: a.size,
+  inline: a.contentDisposition === "inline" || undefined,
+});
+
+/** Fetches one attachment of a message by its index in read_email's attachment list. */
+export async function getAttachment(account: ResolvedAccount, folder: string, uid: number, index: number) {
+  return inFolder(account, folder, async (c) => {
+    const msg = await c.fetchOne(String(uid), { source: true }, { uid: true });
+    if (!msg || !msg.source) throw new Error(`No message with UID ${uid} in ${folder}`);
+    const p = await simpleParser(msg.source);
+    const a = p.attachments[index];
+    if (!a) {
+      throw new Error(
+        `Message ${uid} has ${p.attachments.length} attachment(s); there is no index ${index}. ` +
+          "Use the index from read_email's attachment list.",
+      );
+    }
+    if (a.size > ATTACHMENT_MAX_BYTES) {
+      throw new Error(
+        `"${a.filename ?? "attachment"}" is ${a.size} bytes, over the ${ATTACHMENT_MAX_BYTES}-byte limit ` +
+          "(ATTACHMENT_MAX_BYTES). Open it in the mail app instead.",
+      );
+    }
+    return {
+      ...describeAttachment(a, index),
+      filename: a.filename ?? `attachment-${index}`,
+      sha256: sha256(a.content),
+      content: a.content,
+    };
+  });
+}
+
+export interface DraftAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
 }
 
 export interface Draft {
@@ -230,6 +276,7 @@ export interface Draft {
   bcc?: string;
   subject: string;
   body: string;
+  attachments?: DraftAttachment[];
   /** The message being replied to. Its Message-ID must match, so a UID from another mailbox can't slip through. */
   replyTo?: { folder: string; uid: number; messageId: string };
 }
@@ -279,6 +326,7 @@ async function compose(account: ResolvedAccount, c: ImapFlow, d: Draft, keepBcc 
     bcc: d.bcc,
     subject: d.subject,
     text: d.body,
+    attachments: d.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
     inReplyTo,
     references,
   };
@@ -305,6 +353,11 @@ export async function createDraft(account: ResolvedAccount, d: Draft) {
         bcc: emails(d.bcc),
         subject: d.subject,
         body: d.body,
+        attachments: (d.attachments ?? []).map((a) => ({
+          filename: a.filename,
+          size: a.content.length,
+          sha256: sha256(a.content),
+        })),
       },
       replyingTo,
     };
@@ -352,6 +405,8 @@ export interface ApprovedSend {
   bcc: string[];
   subject: string;
   body: string;
+  /** Every attachment by filename and SHA-256, as create_draft returned them. Empty if none. */
+  attachments: { filename: string; sha256: string }[];
 }
 
 /** Compares bodies ignoring only line-ending style and trailing whitespace, which MIME encoding may change. */
@@ -402,6 +457,13 @@ export async function sendDraft(
       const storedBody = p.text ?? (p.html ? htmlToText(p.html) : "");
       if (normBody(storedBody) !== normBody(approved.body)) {
         mismatches.push(`body is:\n---\n${storedBody.trim()}\n---`);
+      }
+      const attachmentKeys = (xs: { filename: string; sha256: string }[]) =>
+        xs.map((x) => `${x.filename.trim()}|${x.sha256.trim().toLowerCase()}`).sort().join("\n");
+      const storedAttachments = p.attachments.map((a) => ({ filename: a.filename ?? "", sha256: sha256(a.content) }));
+      if (attachmentKeys(storedAttachments) !== attachmentKeys(approved.attachments)) {
+        const list = storedAttachments.map((a) => `${a.filename} (sha256 ${a.sha256})`).join(", ") || "(none)";
+        mismatches.push(`attachments are ${list}`);
       }
       if (mismatches.length) {
         throw new Error(

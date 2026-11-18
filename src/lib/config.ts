@@ -22,6 +22,13 @@ export const MCP_URL = `${APP_URL}/api/mcp`;
 /** Sending (of drafts the user approved in chat) is on unless ALLOW_SEND=false. */
 export const ALLOW_SEND = process.env.ALLOW_SEND !== "false";
 
+/**
+ * Largest attachment, in bytes, that get_attachment returns and the most create_draft accepts in total.
+ * Attachments travel base64-encoded inside one request or response (a third larger than the file), and
+ * Vercel caps function bodies at 4.5 MB, so the default leaves room for that.
+ */
+export const ATTACHMENT_MAX_BYTES = Number(process.env.ATTACHMENT_MAX_BYTES) || 3_000_000;
+
 export const DATABASE_URL =
   process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 

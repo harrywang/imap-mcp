@@ -127,6 +127,7 @@ To update: `git pull && docker compose up -d --build`.
 | `ADMIN_EMAIL` | no | Login username, prefilled on the sign-in page. Defaults to `admin@imap-mcp.local`. No mail is sent to it. |
 | `SEND_LIMIT_PER_HOUR` | no | Max emails each mailbox can send per hour. Default 10. |
 | `ALLOW_SEND` | no | `false` removes `send_draft`, so agents can only save drafts. Default: sending approved drafts is allowed. |
+| `ATTACHMENT_MAX_BYTES` | no | Largest attachment `get_attachment` returns, and the most `create_draft` accepts in total. Default 3000000 (3 MB), which keeps base64-encoded requests and responses under Vercel's 4.5 MB body limit. |
 | `MAIL_<n>`, `MAIL_<n>_PASSWORD` | no | More mailboxes: `MAIL_2`, `MAIL_3`, … |
 | `MAIL_<n>_LABEL` | no | **Internal label** agents use to pick the mailbox, like `work`, `gmail` or `yahoo`. Recipients never see it. Must be unique. You can always pick a mailbox by its address or number too. |
 | `MAIL_<n>_NAME` | no | **Sender name** recipients see in the From line, like `Harry Wang`. Not used to pick mailboxes, so several mailboxes can share it. Without it, mail goes out as the bare address. |
@@ -181,18 +182,19 @@ If the mailbox test on the status page shows an authentication error, this is us
 | `list_accounts` | Configured mailboxes |
 | `list_folders` | Folders in a mailbox |
 | `search_emails` | Search by text, from, to, subject, date range, unread. Newest first. |
-| `read_email` | Headers, plain-text body, attachment list. Doesn't mark as read. |
-| `create_draft` | Saves to Drafts, threaded when replying. Replies come from the mailbox the original was read in. |
+| `read_email` | Headers, plain-text body, attachment list (each with an `index`). Doesn't mark as read. |
+| `get_attachment` | One attachment by its `index` from `read_email`: text files as text, images as images, anything else (PDF, Office, …) as a base64 resource. Up to `ATTACHMENT_MAX_BYTES`. Doesn't mark as read. |
+| `create_draft` | Saves to Drafts, threaded when replying, optionally with attachments (filename + base64, up to `ATTACHMENT_MAX_BYTES` in total). Returns each attachment's size and SHA-256. Replies come from the mailbox the original was read in. |
 | `move_email` | Move to another folder (Archive, Trash, …) |
 | `mark_read` | Mark read or unread |
-| `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients, subject and full body, so your client's approval prompt shows the whole email. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
+| `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients, subject, full body and each attachment's filename and SHA-256, so your client's approval prompt shows the whole email. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
 
 Every tool takes an `account` (address, label or number) and every result says which mailbox it came from.
 
 With several mailboxes, the server keeps them apart:
 
 - `search_emails` and `list_folders` default to the first mailbox when `account` is left out.
-- `read_email`, `move_email`, `mark_read`, `create_draft` and `send_draft` refuse to run without `account`. UIDs only mean something inside one mailbox, and mail must go out from the right address. The error tells the agent to ask you which mailbox you mean.
+- `read_email`, `get_attachment`, `move_email`, `mark_read`, `create_draft` and `send_draft` refuse to run without `account`. UIDs only mean something inside one mailbox, and mail must go out from the right address. The error tells the agent to ask you which mailbox you mean.
 - A reply has to pass both the original's UID and its Message-ID (from `read_email`). If they don't match in the chosen mailbox, which happens when a UID from one mailbox is used in another, nothing is saved or sent.
 
 ## Security and privacy
@@ -208,14 +210,14 @@ With several mailboxes, the server keeps them apart:
 
 - **Nothing is stored.** Each tool call connects to your mail server, does its job and disconnects. The database holds only your login, OAuth clients and tokens, and rate-limit counters. No message content, addresses or subjects.
 - **Nothing is logged or tracked.** The app doesn't log mail content and has no analytics.
-- **Your agent sees what it reads.** Messages returned by `search_emails` and `read_email` go to the agent you connected, so its provider's privacy policy applies to that content.
+- **Your agent sees what it reads.** Messages returned by `search_emails` and `read_email`, and attachments returned by `get_attachment`, go to the agent you connected, so its provider's privacy policy applies to that content.
 - **Reading doesn't change anything.** `read_email` leaves messages unread.
 
 **How sending works**
 
-1. The agent saves the message to your Drafts folder with `create_draft` and shows you the full draft: From, To, Cc, Bcc, subject and body.
-2. You approve it in the chat. Clients like Claude also ask before running `send_draft`, and the prompt shows the recipients, subject and full body. Don't set it to always-allow.
-3. `send_draft` sends that exact draft. If the draft was edited or replaced, or the recipients, subject or body don't match what you approved, nothing is sent.
+1. The agent saves the message to your Drafts folder with `create_draft` and shows you the full draft: From, To, Cc, Bcc, subject, body, and each attachment's name and size.
+2. You approve it in the chat. Clients like Claude also ask before running `send_draft`, and the prompt shows the recipients, subject, full body and attachment names. Don't set it to always-allow.
+3. `send_draft` sends that exact draft. If the draft was edited or replaced, or the recipients, subject, body or attachments (compared by filename and SHA-256) don't match what you approved, nothing is sent.
 4. A copy goes to Sent and the draft is removed.
 
 Each mailbox can send at most 10 emails an hour (`SEND_LIMIT_PER_HOUR`). There's no way to send arbitrary text or forward messages. Set `ALLOW_SEND=false` for drafts only.
