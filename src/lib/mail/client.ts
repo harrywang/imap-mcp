@@ -458,10 +458,13 @@ export async function sendDraft(
       if (normBody(storedBody) !== normBody(approved.body)) {
         mismatches.push(`body is:\n---\n${storedBody.trim()}\n---`);
       }
-      const attachmentKeys = (xs: { filename: string; sha256: string }[]) =>
-        xs.map((x) => `${x.filename.trim()}|${x.sha256.trim().toLowerCase()}`).sort().join("\n");
       const storedAttachments = p.attachments.map((a) => ({ filename: a.filename ?? "", sha256: sha256(a.content) }));
-      if (attachmentKeys(storedAttachments) !== attachmentKeys(approved.attachments)) {
+      const attachmentsMatch = storedAttachments.length === approved.attachments.length &&
+        storedAttachments.every((file, index) => {
+          const expected = approved.attachments[index];
+          return file.filename === expected.filename && file.sha256 === expected.sha256.toLowerCase();
+        });
+      if (!attachmentsMatch) {
         const list = storedAttachments.map((a) => `${a.filename} (sha256 ${a.sha256})`).join(", ") || "(none)";
         mismatches.push(`attachments are ${list}`);
       }

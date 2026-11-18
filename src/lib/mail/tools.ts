@@ -103,21 +103,19 @@ function toDraft(a: DraftArgs): Draft {
       "Pass reply_to_uid and reply_to_message_id together (both from read_email), or neither for a new message.",
     );
   }
+  let total = 0;
   const attachments = a.attachments.map((x) => {
     if (/[\r\n/\\]/.test(x.filename)) throw new Error(`Invalid attachment filename "${x.filename}".`);
     const b64 = x.content_base64.replace(/\s+/g, "");
     if (!BASE64.test(b64) || b64.length % 4 !== 0) {
       throw new Error(`Attachment "${x.filename}" is not valid base64. Nothing was saved.`);
     }
+    total += Buffer.byteLength(b64, "base64");
+    if (total > ATTACHMENT_MAX_BYTES) {
+      throw new Error(`Attachments exceed the ${ATTACHMENT_MAX_BYTES}-byte limit (ATTACHMENT_MAX_BYTES). Nothing was saved.`);
+    }
     return { filename: x.filename, content: Buffer.from(b64, "base64"), contentType: x.content_type };
   });
-  const total = attachments.reduce((n, x) => n + x.content.length, 0);
-  if (total > ATTACHMENT_MAX_BYTES) {
-    throw new Error(
-      `Attachments total ${total} bytes, over the ${ATTACHMENT_MAX_BYTES}-byte limit (ATTACHMENT_MAX_BYTES). ` +
-        "Nothing was saved.",
-    );
-  }
   return {
     to: a.to,
     cc: a.cc,

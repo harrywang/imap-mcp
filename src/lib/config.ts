@@ -27,7 +27,9 @@ export const ALLOW_SEND = process.env.ALLOW_SEND !== "false";
  * Attachments travel base64-encoded inside one request or response (a third larger than the file), and
  * Vercel caps function bodies at 4.5 MB, so the default leaves room for that.
  */
-export const ATTACHMENT_MAX_BYTES = Number(process.env.ATTACHMENT_MAX_BYTES) || 3_000_000;
+const configuredAttachmentLimit = Number(process.env.ATTACHMENT_MAX_BYTES);
+export const ATTACHMENT_MAX_BYTES =
+  Number.isSafeInteger(configuredAttachmentLimit) && configuredAttachmentLimit > 0 ? configuredAttachmentLimit : 3_000_000;
 
 export const DATABASE_URL =
   process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
