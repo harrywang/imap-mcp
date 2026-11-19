@@ -117,7 +117,14 @@ for (let i = 0; i < argv.length; i += 2) {
   const tool = argv[i];
   step(`9. tools/call ${tool} ${argv[i + 1] ?? ""}`);
   out = await rpc("tools/call", { name: tool, arguments: JSON.parse(argv[i + 1] ?? "{}") }, 3 + i);
-  console.log(out.body.result?.content?.[0]?.text ?? JSON.stringify(out.body));
+  const blocks = out.body.result?.content;
+  if (!blocks) console.log(JSON.stringify(out.body));
+  for (const b of blocks ?? []) {
+    if (b.type === "text") console.log(b.text);
+    else if (b.type === "image") console.log(`[image block: ${b.mimeType}, ${b.data.length} base64 chars]`);
+    else if (b.type === "resource") console.log(`[embedded resource: ${b.resource.mimeType}, ${b.resource.blob?.length ?? 0} base64 chars, ${b.resource.uri}]`);
+    else console.log(`[${b.type} block]`);
+  }
 }
 
 step("10. refresh token");

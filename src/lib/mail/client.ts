@@ -117,7 +117,7 @@ async function findSpecialFolder(c: ImapFlow, use: "\\Drafts" | "\\Sent", fallba
 const addr = (a?: AddressObject | AddressObject[]) =>
   a ? (Array.isArray(a) ? a.map((x) => x.text).join(", ") : a.text) : undefined;
 
-const htmlToText = (html: string) =>
+export const htmlToText = (html: string) =>
   html
     .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
     .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, "\n")
@@ -217,9 +217,37 @@ export async function readEmail(account: ResolvedAccount, folder: string, uid: n
       replyTo: addr(p.replyTo),
       subject: p.subject,
       unread: !msg.flags?.has("\\Seen"),
-      attachments: p.attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, size: a.size })),
+      attachments: p.attachments.map((a, i) => ({
+        number: i + 1,
+        filename: a.filename,
+        contentType: a.contentType,
+        size: a.size,
+        inline: a.contentDisposition === "inline" || undefined,
+      })),
       body,
       truncated,
+    };
+  });
+}
+
+/** Fetches one attachment of a message by its 1-based number from read_email. */
+export async function getAttachment(account: ResolvedAccount, folder: string, uid: number, number: number) {
+  return inFolder(account, folder, async (c) => {
+    const msg = await c.fetchOne(String(uid), { source: true }, { uid: true });
+    if (!msg || !msg.source) throw new Error(`No message with UID ${uid} in ${folder}`);
+    const p = await simpleParser(msg.source);
+    const att = p.attachments[number - 1];
+    if (!att) {
+      const list = p.attachments.map((a, i) => `${i + 1}: ${a.filename ?? "(unnamed)"}`).join(", ");
+      throw new Error(`Message ${uid} has no attachment number ${number}. Attachments: ${list || "none"}`);
+    }
+    return {
+      subject: p.subject,
+      file: {
+        filename: (att.filename ?? `attachment-${number}`).replace(/[\r\n\u0000-\u001f\u200b-\u200f\u202a-\u202e]/g, ""),
+        contentType: att.contentType ?? "application/octet-stream",
+        content: att.content,
+      },
     };
   });
 }

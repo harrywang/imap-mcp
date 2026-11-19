@@ -2,8 +2,11 @@ import "server-only";
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import { ALLOW_SEND, getMailAccounts } from "../config";
+import { attachmentToContent } from "./attachments";
 import {
   createDraft,
+  getAttachment,
+  htmlToText,
   getAccount,
   listFolders,
   moveEmail,
@@ -211,7 +214,9 @@ export function createMailServer() {
   server.registerTool(
     "read_email",
     {
-      description: "Read one message (headers, plain-text body, attachment list). Does not mark it as read.",
+      description:
+        "Read one message (headers, plain-text body, numbered attachment list). Use read_attachment to open an " +
+        "attachment. Does not mark it as read.",
       inputSchema: z.object({
         account: accountRequired,
         folder,
@@ -224,6 +229,50 @@ export function createMailServer() {
       try {
         const acct = await getAccount(a.account, { explicit: true });
         return okUntrusted({ account: acct.email, ...(await readEmail(acct, a.folder, a.uid, a.max_chars)) });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "read_attachment",
+    {
+      description:
+        "Read one attachment of a message, by its number from read_email's attachment list. PDFs, Word, Excel/CSV, " +
+        "text, HTML, calendar (.ics) and attached emails come back as text; images come back as an image. Set " +
+        "include_original to also get the original file as an embedded resource, if your client can use files. " +
+        "If the result says something couldn't be read (scanned PDF, password-protected, unsupported type, too " +
+        "large, cut off), tell the user plainly; never guess at content you didn't get. " +
+        "Does not mark the message as read.",
+      inputSchema: z.object({
+        account: accountRequired,
+        folder,
+        uid: z.number().int().describe("UID of the message, from search_emails"),
+        attachment: z.number().int().min(1).describe("Attachment number from read_email's attachments list"),
+        max_chars: z.number().int().min(500).max(200_000).default(50_000).describe("Cut extracted text after this many characters"),
+        include_original: z
+          .boolean()
+          .default(false)
+          .describe("Also return the original file (base64 embedded resource). Only for clients that handle files."),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (a) => {
+      try {
+        const acct = await getAccount(a.account, { explicit: true });
+        const { subject, file } = await getAttachment(acct, a.folder, a.uid, a.attachment);
+        const { content, isError } = await attachmentToContent(
+          file,
+          { account: acct.email, folder: a.folder, uid: a.uid, attachment: a.attachment, messageSubject: subject },
+          {
+            maxChars: a.max_chars,
+            includeOriginal: a.include_original,
+            uri: `imap-mcp://${encodeURIComponent(acct.email)}/${encodeURIComponent(a.folder)}/${a.uid}/${a.attachment}/${encodeURIComponent(file.filename)}`,
+            htmlToText,
+          },
+        );
+        return { content, isError };
       } catch (e) {
         return fail(e);
       }

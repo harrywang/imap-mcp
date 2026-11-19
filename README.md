@@ -125,6 +125,7 @@ To update: `git pull && docker compose up -d --build`.
 | `APP_URL` | self-host | Your public HTTPS URL. Set automatically on Vercel and by Docker Compose (from `DOMAIN`). |
 | `INTERNAL_URL` | no | How the server reaches itself to fetch its token-signing keys, when it can't reach its own public URL. Docker Compose sets `http://localhost:3000`. |
 | `ADMIN_EMAIL` | no | Login username, prefilled on the sign-in page. Defaults to `admin@imap-mcp.local`. No mail is sent to it. |
+| `ATTACHMENT_MAX_RESULT_MB` | no | Largest image or original file `read_attachment` returns, in MB. Default 3, which fits Vercel's response limit; self-hosted can go higher. |
 | `SEND_LIMIT_PER_HOUR` | no | Max emails each mailbox can send per hour. Default 10. |
 | `ALLOW_SEND` | no | `false` removes `send_draft`, so agents can only save drafts. Default: sending approved drafts is allowed. |
 | `MAIL_<n>`, `MAIL_<n>_PASSWORD` | no | More mailboxes: `MAIL_2`, `MAIL_3`, … |
@@ -181,7 +182,8 @@ If the mailbox test on the status page shows an authentication error, this is us
 | `list_accounts` | Configured mailboxes |
 | `list_folders` | Folders in a mailbox |
 | `search_emails` | Search by text, from, to, subject, date range, unread. Newest first. |
-| `read_email` | Headers, plain-text body, attachment list. Doesn't mark as read. |
+| `read_email` | Headers, plain-text body, numbered attachment list. Doesn't mark as read. |
+| `read_attachment` | Opens one attachment. PDF, Word, Excel/CSV, text, HTML, calendar invites and attached emails come back as text, and images as images, so any MCP client can use them. `include_original` also returns the original file for clients that handle files. Up to 15 MB; other file types (ZIP, …) aren't opened. |
 | `create_draft` | Saves to Drafts, threaded when replying. Replies come from the mailbox the original was read in. |
 | `move_email` | Move to another folder (Archive, Trash, …) |
 | `mark_read` | Mark read or unread |
