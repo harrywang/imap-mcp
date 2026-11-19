@@ -7,6 +7,7 @@ A personal MCP server that gives AI agents (Claude, ChatGPT, Cursor, VS Code, or
 - **Next.js 16 + Better Auth + shadcn/ui**, deployed on Vercel with a Neon Postgres database. One Vercel account covers everything.
 - **OAuth login, nothing secret in the URL.** Your agent registers itself (dynamic client registration). You sign in once and approve it on a consent page. Access tokens last 1 hour, refresh tokens 30 days.
 - **Multiple mailboxes, kept apart.** Add up to 20 (`MAIL_2`, `MAIL_3`, …). Every result says which mailbox it came from, replies go out from the mailbox the original arrived in, and when it's unclear which one you mean, the agent is told to ask instead of guessing.
+- **Reads attachments.** PDFs, Word, Excel/CSV, text, calendar invites and images, returned as standard MCP content any client can use. If something can't be read, such as a scanned PDF, the agent is told to say so instead of guessing.
 - **Nothing is sent without your yes.** The agent saves every message as a draft, shows it to you, and can send that exact draft only after you approve it in the chat. Set `ALLOW_SEND=false` for drafts only.
 - **Mail passwords never touch the database.** They live only in Vercel environment variables. The database holds login and OAuth data.
 
@@ -189,6 +190,8 @@ If the mailbox test on the status page shows an authentication error, this is us
 | `mark_read` | Mark read or unread |
 | `send_draft` | Sends a draft from `create_draft`, exactly as saved, after you approve it in the chat. The call must repeat the draft's recipients, subject and full body, so your client's approval prompt shows the whole email. Saves a copy to Sent and removes the draft. Max 10 per mailbox per hour. Not available with `ALLOW_SEND=false`. |
 
+**When an attachment can't be read**, `read_attachment` says so plainly, ending with a "Tell the user: …" message, and returns an error when nothing usable came back. That covers scanned PDFs (pictures of pages, no text), password-protected or damaged files, unsupported types like ZIP, files over 15 MB, text that was cut off, and files that take more than 20 seconds to process.
+
 Every tool takes an `account` (address, label or number) and every result says which mailbox it came from.
 
 With several mailboxes, the server keeps them apart:
@@ -210,7 +213,7 @@ With several mailboxes, the server keeps them apart:
 
 - **Nothing is stored.** Each tool call connects to your mail server, does its job and disconnects. The database holds only your login, OAuth clients and tokens, and rate-limit counters. No message content, addresses or subjects.
 - **Nothing is logged or tracked.** The app doesn't log mail content and has no analytics.
-- **Your agent sees what it reads.** Messages returned by `search_emails` and `read_email` go to the agent you connected, so its provider's privacy policy applies to that content.
+- **Your agent sees what it reads.** Messages and attachments returned by `search_emails`, `read_email` and `read_attachment` go to the agent you connected, so its provider's privacy policy applies to that content. Attachments are converted on your server as they're read and never stored.
 - **Reading doesn't change anything.** `read_email` leaves messages unread.
 
 **How sending works**
