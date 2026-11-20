@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.harrywang/imap-mcp",
+  "title": "IMAP MCP",
+  "description": "Remote MCP server for any IMAP mailbox: OAuth, multiple mailboxes, attachments, approved sends",
+  "repository": {
+    "url": "https://github.com/harrywang/imap-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://www.harrywang.me/projects/tools/imap-mcp",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/api/mcp",
+      "variables": {
+        "host": {
+          "description": "Hostname of your own deployment (one-click Vercel deploy or self-hosted Docker), e.g. your-app.vercel.app",
+          "isRequired": true
+        }
+      }
+    }
+  ]
+}
