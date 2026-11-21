@@ -323,6 +323,7 @@ export async function createDraft(account: ResolvedAccount, d: Draft) {
     const drafts = await findSpecialFolder(c, "\\Drafts", ["Drafts", "INBOX.Drafts", "Draft"]);
     const res = await c.append(drafts, raw, ["\\Draft", "\\Seen"]);
     return {
+      status: "DRAFT SAVED, NOT SENT",
       savedTo: drafts,
       draftUid: res ? res.uid : undefined,
       draftMessageId: messageId,
@@ -451,7 +452,11 @@ export async function sendDraft(
         auth: { user: account.username, pass: account.password },
       });
       const info = await transport.sendMail({ envelope: { from: account.email, to: recipients }, raw });
-      await recordSend(account.email);
+
+      // The email is out. From here on nothing may turn this into a failure: an error now would make the
+      // agent think nothing was sent, and a retry would email the recipients twice. Cleanup is best-effort.
+      const warnings: string[] = [];
+      await recordSend(account.email).catch(() => warnings.push("Couldn't record this send in the hourly send log."));
 
       // Keep a copy in Sent (many servers don't save SMTP-sent mail), then remove the draft.
       let copySavedTo: string | undefined;
@@ -460,16 +465,28 @@ export async function sendDraft(
         await c.append(copySavedTo, raw, ["\\Seen"]);
       } catch {
         copySavedTo = undefined;
+        warnings.push("The email was sent, but a copy couldn't be saved to the Sent folder.");
       }
-      await c.messageDelete(String(draftUid), { uid: true });
+      let draftRemoved = true;
+      try {
+        await c.messageDelete(String(draftUid), { uid: true });
+      } catch {
+        draftRemoved = false;
+        warnings.push(
+          `The email was sent, but the draft (UID ${draftUid}) couldn't be removed. Do NOT send it again; ` +
+            "tell the user the leftover draft can be deleted.",
+        );
+      }
       return {
+        status: "SENT",
         from: account.email,
         sentTo: recipients,
         subject: p.subject,
         accepted: info.accepted,
         rejected: info.rejected,
         copySavedTo,
-        draftRemoved: true,
+        draftRemoved,
+        ...(warnings.length ? { warnings } : {}),
       };
     } finally {
       lock.release();
